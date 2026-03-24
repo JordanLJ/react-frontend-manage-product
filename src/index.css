@@ -102,6 +102,14 @@ body {
   gap: 0.6rem;
 }
 
+.action-row select {
+  border-radius: calc(var(--intro-radius) - 2px);
+  border: 1px solid var(--intro-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--intro-text);
+  padding: 0.55rem 0.7rem;
+}
+
 .btn {
   border: 1px solid var(--intro-border);
   background: rgba(255, 255, 255, 0.04);
@@ -214,4 +222,19 @@ body {
   text-align: center;
   color: color-mix(in srgb, var(--intro-text) 70%, #9ca3af 30%);
   padding: 1rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.stats-grid span {
+  border: 1px solid var(--intro-border);
+  border-radius: calc(var(--intro-radius) - 2px);
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.9rem;
 }

@@ -5,18 +5,25 @@ import { AUTH_CONFIG } from "./config/auth";
 function App() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem("identity_access_token"));
   const [authError, setAuthError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
   // États du formulaire
   const [id, setId] = useState(null);
   const [name, setName] = useState("");
+  const [marketingName, setMarketingName] = useState("");
   const [price, setPrice] = useState("");
   const [description, setDescription] = useState("");
   const [quantity, setQuantity] = useState("");
-  const [categoryId, setCategoryId] = useState(""); // <-- category_id
+  const [categoryId, setCategoryId] = useState("");
   const [sku, setSku] = useState("");
+  const [mediaPath, setMediaPath] = useState("");
+  const [variantSku, setVariantSku] = useState("");
+  const [variantPrice, setVariantPrice] = useState("");
+  const [variantStock, setVariantStock] = useState("");
 
   const API_BASE_URL = AUTH_CONFIG.API_URL;
   const CATEGORY_API = `${API_BASE_URL}/categories`;
@@ -82,15 +89,28 @@ function App() {
     sessionStorage.removeItem("oauth_code_verifier");
   };
 
+  const fetchDashboard = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/pm/dashboard`, {
+        headers: getAuthHeaders(),
+      });
+      setDashboard(res.data);
+    } catch (error) {
+      console.error("Erreur dashboard:", error);
+    }
+  };
+
   // Récupérer les produits
   const fetchProducts = async () => {
     try {
-      const res = await axios.get(`${API_BASE_URL}/products`, {
+      const res = await axios.get(`${API_BASE_URL}/pm/products`, {
         headers: getAuthHeaders(),
+        params: statusFilter ? { status: statusFilter } : {},
       });
-      const backendProducts = res.data?.products?.data || [];
+      const backendProducts = res.data?.data || [];
       setProducts(Array.isArray(backendProducts) ? backendProducts : []);
       setAuthError("");
+      fetchDashboard();
     } catch (error) {
       const message =
         error?.response?.data?.error ||
@@ -119,7 +139,7 @@ function App() {
     if (localStorage.getItem("identity_access_token")) {
       fetchProducts();
     }
-  }, []);
+  }, [statusFilter]);
 
   useEffect(() => {
     const completeOAuthCallback = async () => {
@@ -206,31 +226,61 @@ function App() {
     try {
       const payload = {
         name,
+        marketing_name: marketingName,
         price,
         description,
         quantity,
         sku,
-        category_id: categoryId, // <-- correspond au backend
+        category_id: categoryId,
+        primary_category_id: categoryId,
       };
 
       if (id) {
-        await axios.put(`${API_BASE_URL}/products/${id}`, payload, {
+        await axios.put(`${API_BASE_URL}/pm/products/${id}`, payload, {
           headers: getAuthHeaders(),
         });
       } else {
-        await axios.post(`${API_BASE_URL}/products`, payload, {
+        const create = await axios.post(`${API_BASE_URL}/pm/products`, payload, {
           headers: getAuthHeaders(),
         });
+
+        const productId = create.data?.id;
+
+        if (productId && variantSku) {
+          await axios.post(`${API_BASE_URL}/pm/products/${productId}/variants`, {
+            sku: variantSku,
+            price: variantPrice ? Number(variantPrice) : Number(price),
+            stock: variantStock ? Number(variantStock) : Number(quantity),
+            currency: "EUR",
+          }, {
+            headers: getAuthHeaders(),
+          });
+        }
+
+        if (productId && mediaPath) {
+          await axios.post(`${API_BASE_URL}/pm/products/${productId}/media`, {
+            type: "image",
+            path: mediaPath,
+            sort_order: 1,
+          }, {
+            headers: getAuthHeaders(),
+          });
+        }
       }
 
       // Réinitialiser le formulaire
       setId(null);
       setName("");
+      setMarketingName("");
       setPrice("");
       setDescription("");
       setQuantity("");
       setCategoryId(categories.length > 0 ? categories[0].id : "");
       setSku("");
+      setMediaPath("");
+      setVariantSku("");
+      setVariantPrice("");
+      setVariantStock("");
 
       fetchProducts();
     } catch (error) {
@@ -241,7 +291,7 @@ function App() {
   // Supprimer un produit
   const deleteProduct = async (id) => {
     try {
-      await axios.delete(`${API_BASE_URL}/products/${id}`, {
+      await axios.post(`${API_BASE_URL}/pm/products/${id}/archive`, {}, {
         headers: getAuthHeaders(),
       });
       fetchProducts();
@@ -254,11 +304,22 @@ function App() {
   const editProduct = (product) => {
     setId(product.id);
     setName(product.name);
+    setMarketingName(product.marketing_name || "");
     setPrice(product.price);
     setDescription(product.description);
     setQuantity(product.quantity);
-    setCategoryId(product.category?.id || ""); // relation category
+    setCategoryId(product.primary_category_id || product.category_id || "");
     setSku(product.sku);
+  };
+
+  const submitProduct = async (productId) => {
+    await axios.post(`${API_BASE_URL}/pm/products/${productId}/submit`, {}, { headers: getAuthHeaders() });
+    fetchProducts();
+  };
+
+  const publishProduct = async (productId) => {
+    await axios.post(`${API_BASE_URL}/pm/products/${productId}/publish`, {}, { headers: getAuthHeaders() });
+    fetchProducts();
   };
 
   return (
@@ -275,6 +336,15 @@ function App() {
         </header>
 
         <section className="intro-card">
+          {dashboard ? (
+            <div className="stats-grid">
+              <span>Total: {dashboard.stats?.total ?? 0}</span>
+              <span>Brouillon: {dashboard.stats?.draft ?? 0}</span>
+              <span>En validation: {dashboard.stats?.pending_validation ?? 0}</span>
+              <span>Publies: {dashboard.stats?.published ?? 0}</span>
+              <span>Archives: {dashboard.stats?.archived ?? 0}</span>
+            </div>
+          ) : null}
           <div className="action-row">
             <button type="button" className="btn btn-primary" onClick={startLogin} disabled={isAuthenticating}>
               {isAuthenticating ? "Connexion en cours..." : "Se connecter (OAuth)"}
@@ -285,6 +355,13 @@ function App() {
             <button type="button" className="btn" onClick={fetchProducts} disabled={!isAuthenticated}>
               Recharger les produits
             </button>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">Tous statuts</option>
+              <option value="draft">Brouillon</option>
+              <option value="pending_validation">En validation</option>
+              <option value="published">Publie</option>
+              <option value="archived">Archive</option>
+            </select>
           </div>
           {authError ? <p className="intro-alert">{authError}</p> : null}
         </section>
@@ -293,6 +370,7 @@ function App() {
           <h2>{id ? "Modifier un produit" : "Ajouter un produit"}</h2>
           <form onSubmit={handleSubmit} className="product-form">
             <input placeholder="Nom" value={name} onChange={(e) => setName(e.target.value)} required />
+            <input placeholder="Nom marketing" value={marketingName} onChange={(e) => setMarketingName(e.target.value)} />
             <input placeholder="Prix" type="number" value={price} onChange={(e) => setPrice(e.target.value)} required />
             <input placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
             <input placeholder="Quantite" type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
@@ -304,6 +382,14 @@ function App() {
               ))}
             </select>
             <input placeholder="SKU" value={sku} onChange={(e) => setSku(e.target.value)} required />
+            {!id ? (
+              <>
+                <input placeholder="SKU variante (optionnel)" value={variantSku} onChange={(e) => setVariantSku(e.target.value)} />
+                <input placeholder="Prix variante (optionnel)" type="number" value={variantPrice} onChange={(e) => setVariantPrice(e.target.value)} />
+                <input placeholder="Stock variante (optionnel)" type="number" value={variantStock} onChange={(e) => setVariantStock(e.target.value)} />
+                <input placeholder="URL media image (optionnel)" value={mediaPath} onChange={(e) => setMediaPath(e.target.value)} />
+              </>
+            ) : null}
             <button type="submit" className="btn btn-primary btn-full">
               {id ? "Mettre a jour" : "Ajouter"}
             </button>
@@ -323,6 +409,7 @@ function App() {
                   <th>Quantite</th>
                   <th>Categorie</th>
                   <th>SKU</th>
+                  <th>Statut</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -337,13 +424,20 @@ function App() {
                       <td>{product.quantity}</td>
                       <td>{product.category?.name || "-"}</td>
                       <td>{product.sku}</td>
+                      <td>{product.status}</td>
                       <td>
                         <div className="table-actions">
                           <button className="btn btn-small" onClick={() => editProduct(product)}>
                             Modifier
                           </button>
+                          <button className="btn btn-small" onClick={() => submitProduct(product.id)}>
+                            Soumettre
+                          </button>
+                          <button className="btn btn-small btn-primary" onClick={() => publishProduct(product.id)}>
+                            Publier
+                          </button>
                           <button className="btn btn-small btn-danger" onClick={() => deleteProduct(product.id)}>
-                            Supprimer
+                            Archiver
                           </button>
                         </div>
                       </td>
@@ -351,7 +445,7 @@ function App() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="8" className="empty-row">
+                    <td colSpan="9" className="empty-row">
                       Aucun produit trouve
                     </td>
                   </tr>
