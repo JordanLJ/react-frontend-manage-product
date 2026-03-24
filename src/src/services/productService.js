@@ -1,8 +1,20 @@
 import axios from "axios";
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000/api";
 
-export const getProducts = () => axios.get(`${API_URL}/products`);
-export const addProduct = (data) => axios.post(`${API_URL}/products`, data);
-export const updateProduct = (id, data) => axios.put(`${API_URL}/products/${id}`, data);
-export const deleteProduct = (id) => axios.delete(`${API_URL}/products/${id}`);
-export const getCategories = () => axios.get(`${API_URL}/categories`);
+const api = axios.create({
+  baseURL: API_URL,
+});
+
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem("identity_access_token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+export const getProducts = () => api.get("/products");
+export const addProduct = (data) => api.post("/products", data);
+export const updateProduct = (id, data) => api.put(`/products/${id}`, data);
+export const deleteProduct = (id) => api.delete(`/products/${id}`);
+export const getCategories = () => api.get("/categories");

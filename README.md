@@ -23,6 +23,7 @@ L’application permet de :
 * ❌ Suppression de produit
 * 🗂️ Gestion des catégories (select dynamique)
 * 🔄 Synchronisation avec API Laravel via Axios
+* 🔐 Authentification OAuth2 (Authorization Code + PKCE)
 
 ---
 
@@ -64,16 +65,26 @@ npm start
 
 ---
 
-## 🔗 Configuration API
+## 🔗 Configuration API & OAuth
 
-Dans le fichier `App.jsx`, les URLs API sont définies :
+Dans le fichier `.env`, configure :
 
-```js
-const API_URL = "http://127.0.0.1:8000/api/products";
-const CATEGORY_API = "http://127.0.0.1:8000/api/categories";
+```bash
+VITE_IDENTITY_ISSUER=http://localhost:8080
+VITE_TENANT_SLUG=ucb
+VITE_CLIENT_ID=TON_CLIENT_ID
+VITE_REDIRECT_URI=http://localhost:5173/auth/callback
+VITE_OAUTH_SCOPES=openid profile email offline_access
+VITE_API_URL=http://127.0.0.1:8000/api
 ```
 
 ⚠️ Assure-toi que ton backend Laravel est lancé sur ce port.
+
+Le frontend exécute le flow OAuth complet :
+1. Redirect vers `GET /v1/{tenant}/oauth/authorize`
+2. Retour sur `/auth/callback?code=...&state=...`
+3. Échange code/token via `POST /v1/{tenant}/oauth/token`
+4. Stockage `access_token` puis appels API avec `Authorization: Bearer ...`
 
 ---
 
